@@ -418,6 +418,8 @@ public:
   MOCK_METHOD0(dispatcher, Event::Dispatcher&());
   MOCK_CONST_METHOD0(localAddress, Address::InstanceConstSharedPtr&());
   MOCK_METHOD1(send, Api::IoCallUint64Result(const UdpSendData&));
+
+  Event::MockDispatcher dispatcher_;
 };
 
 class MockUdpReadFilterCallbacks : public UdpReadFilterCallbacks {

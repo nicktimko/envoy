@@ -5,10 +5,11 @@ Filters
   :glob:
   :maxdepth: 2
 
+  listener/listener
   network/network
   http/http
-  thrift/thrift
+  udp/udp
   accesslog/v2/accesslog.proto
   fault/v2/fault.proto
-  listener/listener
   dubbo/dubbo
+  thrift/thrift

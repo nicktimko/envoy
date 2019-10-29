@@ -7,9 +7,6 @@ namespace Extensions {
 namespace UdpFilters {
 namespace UdpProxy {
 
-// TODO(mattklein123): Logging
-// TODO(mattklein123): Stats
-
 void UdpProxyFilter::onData(Network::UdpRecvData& data) {
   const auto active_session_it = sessions_.find(data.addresses_);
   ActiveSession* active_session;
@@ -18,7 +15,7 @@ void UdpProxyFilter::onData(Network::UdpRecvData& data) {
     // TODO(mattklein123): Instead of looking up the cluster each time, keep track of it via
     // cluster manager callbacks.
     Upstream::ThreadLocalCluster* cluster = config_->getCluster();
-    // TODO(mattklein123): Handle the case where the cluster does not exist.
+    // TODO(mattklein123): Handle the case where the cluster does not exist and add stat.
     ASSERT(cluster != nullptr);
 
     // TODO(mattklein123): Pass a context and support hash based routing.
@@ -41,14 +38,18 @@ UdpProxyFilter::ActiveSession::ActiveSession(UdpProxyFilter& parent,
                                              Network::UdpRecvData::LocalPeerAddresses&& addresses,
                                              const Upstream::HostConstSharedPtr& host)
     : parent_(parent), addresses_(std::move(addresses)), host_(host),
+      idle_timer_(parent.read_callbacks_->udpListener().dispatcher().createTimer(
+          [this] { onIdleTimer(); })),
       // NOTE: The socket call can only fail due to memory/fd exhaustion. No local ephemeral port
       //       is bound until the first packet is sent to the upstream host.
-      io_handle_(host->address()->socket(Network::Address::SocketType::Datagram)),
+      io_handle_(parent.createIoHandle(host)),
       socket_event_(parent.read_callbacks_->udpListener().dispatcher().createFileEvent(
           io_handle_->fd(), [this](uint32_t) { onReadReady(); }, Event::FileTriggerType::Edge,
           Event::FileReadyType::Read)) {
   ENVOY_LOG(debug, "creating new session: downstream={} local={}", addresses_.peer_->asStringView(),
             addresses_.local_->asStringView());
+  parent_.config_->stats().downstream_sess_total_.inc();
+  parent_.config_->stats().downstream_sess_active_.inc();
 
   // TODO(mattklein123): Enable dropped packets socket option. In general the Socket abstraction
   // does not work well right now for client sockets. It's too heavy weight and is aimed at listener
@@ -57,8 +58,16 @@ UdpProxyFilter::ActiveSession::ActiveSession(UdpProxyFilter& parent,
   // handle.
 }
 
+UdpProxyFilter::ActiveSession::~ActiveSession() {
+  parent_.config_->stats().downstream_sess_active_.dec();
+}
+
+void UdpProxyFilter::ActiveSession::onIdleTimer() { parent_.sessions_.erase(addresses_); }
+
 void UdpProxyFilter::ActiveSession::onReadReady() {
   // TODO(mattklein123): Refresh idle timer.
+  // TODO(mattklein123): We should not be passing *addresses_.local_ to this function as we are
+  //                     not trying to populate the local address for received packets.
   uint32_t packets_dropped = 0;
   const Api::IoErrorPtr result = Network::Utility::readPacketsFromSocket(
       *io_handle_, *addresses_.local_, *this, parent_.config_->timeSource(), packets_dropped);
@@ -68,9 +77,10 @@ void UdpProxyFilter::ActiveSession::onReadReady() {
 }
 
 void UdpProxyFilter::ActiveSession::write(const Buffer::Instance& buffer) {
-  ENVOY_LOG(trace, "writing {} byte datagram: downstream={} local={} upstream={}", buffer.length(),
-            addresses_.peer_->asStringView(), addresses_.local_->asStringView(),
+  ENVOY_LOG(trace, "writing {} byte datagram upstream: downstream={} local={} upstream={}",
+            buffer.length(), addresses_.peer_->asStringView(), addresses_.local_->asStringView(),
             host_->address()->asStringView());
+  parent_.config_->stats().downstream_sess_rx_bytes_total_.add(buffer.length());
 
   // TODO(mattklein123): Refresh idle timer.
   // NOTE: On the first write, a local ephemeral port is bound, and thus this write can fail due to
@@ -86,6 +96,10 @@ void UdpProxyFilter::ActiveSession::write(const Buffer::Instance& buffer) {
 void UdpProxyFilter::ActiveSession::processPacket(Network::Address::InstanceConstSharedPtr,
                                                   Network::Address::InstanceConstSharedPtr,
                                                   Buffer::InstancePtr buffer, MonotonicTime) {
+  ENVOY_LOG(trace, "writing {} byte datagram downstream: downstream={} local={} upstream={}",
+            buffer->length(), addresses_.peer_->asStringView(), addresses_.local_->asStringView(),
+            host_->address()->asStringView());
+  parent_.config_->stats().downstream_sess_tx_bytes_total_.add(buffer->length());
   Network::UdpSendData data{addresses_.local_->ip(), *addresses_.peer_, *buffer};
   const Api::IoCallUint64Result rc = parent_.read_callbacks_->udpListener().send(data);
   // TODO(mattklein123): Increment stat on failure.
