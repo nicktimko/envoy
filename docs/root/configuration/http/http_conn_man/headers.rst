@@ -142,11 +142,36 @@ A client certificate may contain multiple Subject Alternative Name types. For de
 
 .. _RFC 2459: https://tools.ietf.org/html/rfc2459#section-4.2.1.7
 
-Some examples of the XFCC header are:
+Some examples of the XFCC header are (newlines and whitespace added for readability):
 
-1. For one client certificate with only URI type Subject Alternative Name: ``x-forwarded-client-cert: By=http://frontend.lyft.com;Hash=468ed33be74eee6556d90c0149c1309e9ba61d6425303443c0748a02dd8de688;Subject="/C=US/ST=CA/L=San Francisco/OU=Lyft/CN=Test Client";URI=http://testclient.lyft.com``
-2. For two client certificates with only URI type Subject Alternative Name: ``x-forwarded-client-cert: By=http://frontend.lyft.com;Hash=468ed33be74eee6556d90c0149c1309e9ba61d6425303443c0748a02dd8de688;URI=http://testclient.lyft.com,By=http://backend.lyft.com;Hash=9ba61d6425303443c0748a02dd8de688468ed33be74eee6556d90c0149c1309e;URI=http://frontend.lyft.com``
-3. For one client certificate with both URI type and DNS type Subject Alternative Name: ``x-forwarded-client-cert: By=http://frontend.lyft.com;Hash=468ed33be74eee6556d90c0149c1309e9ba61d6425303443c0748a02dd8de688;Subject="/C=US/ST=CA/L=San Francisco/OU=Lyft/CN=Test Client";URI=http://testclient.lyft.com;DNS=lyft.com;DNS=www.lyft.com``
+
+1. For one client certificate with only URI type Subject Alternative Name::
+
+    x-forwarded-client-cert:
+        By=http://frontend.lyft.com;
+        Hash=468ed33be74eee6556d90c0149c1309e9ba61d6425303443c0748a02dd8de688;
+        Subject="/C=US/ST=CA/L=San Francisco/OU=Lyft/CN=Test Client";
+        URI=http://testclient.lyft.com``
+
+2. For two client certificates with only URI type Subject Alternative Name::
+
+    x-forwarded-client-cert: 
+        By=http://frontend.lyft.com;
+        Hash=468ed33be74eee6556d90c0149c1309e9ba61d6425303443c0748a02dd8de688;
+        URI=http://testclient.lyft.com,
+        By=http://backend.lyft.com;
+        Hash=9ba61d6425303443c0748a02dd8de688468ed33be74eee6556d90c0149c1309e;
+        URI=http://frontend.lyft.com
+
+3. For one client certificate with both URI type and DNS type Subject Alternative Name::
+
+    x-forwarded-client-cert:
+        By=http://frontend.lyft.com;
+        Hash=468ed33be74eee6556d90c0149c1309e9ba61d6425303443c0748a02dd8de688;
+        Subject="/C=US/ST=CA/L=San Francisco/OU=Lyft/CN=Test Client";
+        URI=http://testclient.lyft.com;
+        DNS=lyft.com;
+        DNS=www.lyft.com
 
 How Envoy processes XFCC is specified by the
 :ref:`forward_client_cert_details<envoy_api_field_config.filter.network.http_connection_manager.v2.HttpConnectionManager.forward_client_cert_details>`
